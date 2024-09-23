@@ -63,17 +63,16 @@ dedup_stable_commits() {
 	# dedup commits which had been merged by previous stable kernel
 	cat $DEDUP_IN_FILE | while read commit1
 	do
-		NOT_DUP=$(git log v${STABLE_VERSION}.. | grep "$commit1")
 		echo $commit1 $STABLE_VERSION IN=$DEDUP_IN_FILE OUT=$DEDUP_OUT_FILE
-		if [ ! -n "$NOT_DUP" ]; then
+		# TODO better matching
+		git log v${STABLE_VERSION}.. | grep "$commit1" | grep commit |grep pstream
+		if [ $? -eq 1 ]; then
 			if [ "$FINAL" = "false" ]; then
 				echo ${commit1} >> $DEDUP_OUT_FILE
 			else
 				commit_summary=$(git show --pretty=format:"%h %s" --no-patch $commit1)
 				echo ${commit_summary} >> $DEDUP_OUT_FILE
 			fi
-		else
-			continue
 		fi
 	done
 }
@@ -127,21 +126,21 @@ else
 	echo "Base version $BASE_VERSION, PRE_VERSION $PRE_VERSION, AFTER_VERSION $AFTER_VERSION"
 fi
 
-#rm -rf $COMMIT1_FILE $COMMIT2_FILE $DEDUP_CUR_FILE $DEDUP_PRE_FILE $DEDUP_AFTER_FILE $CHECK_FILE
+rm -rf $COMMIT1_FILE $COMMIT2_FILE $DEDUP_CUR_FILE $DEDUP_PRE_FILE $DEDUP_AFTER_FILE $CHECK_FILE
 
 # PART I - get all fix commits from BASE_VERSION
 cd $LINUX_TREE
-#git pull
-#git log --no-merges  --oneline v${BASE_VERSION}.. | cut -d ' ' -f1 > $COMMIT1_FILE
-#cat $COMMIT1_FILE | while read commit1
-#do
-#	IS_FIX=$(git show ${commit1} | grep "Fixes: ")
-#	if [ ! -n "$IS_FIX" ]; then
-#		continue
-#	else
-#		echo ${commit1} >> $COMMIT2_FILE
-#	fi
-#done
+git pull
+git log --no-merges  --oneline v${BASE_VERSION}.. | cut -d ' ' -f1 > $COMMIT1_FILE
+cat $COMMIT1_FILE | while read commit1
+do
+	IS_FIX=$(git show ${commit1} | grep "Fixes: ")
+	if [ ! -n "$IS_FIX" ]; then
+		continue
+	else
+		echo ${commit1} >> $COMMIT2_FILE
+	fi
+done
 echo "PART I is done !"
 
 # PART II - remove fix commits which have been merged by stable kernel which
@@ -186,11 +185,14 @@ echo "PART II.3 is done !"
 
 # sort the final file per subsystem
 if [ $a_result -eq 1 ]; then
-	sort -k 2 $DEDUP_AFTER_FILE > $CHECK_FILE
+	sort -k 1 -u $DEDUP_AFTER_FILE -o $DEDUP_AFTER_FILE
+	sort -k 2 $DEDUP_AFTER_FILE -o $CHECK_FILE
 elif [ $p_result -eq 1 ]; then
-	sort -k 2 $DEDUP_PRE_FILE > $CHECK_FILE
+	sort -k 1 -u $DEDUP_PRE_FILE -o $DEDUP_PRE_FILE
+	sort -k 2 $DEDUP_PRE_FILE -o $CHECK_FILE
 else
-	sort -k 2 $DEDUP_CUR_FILE > $CHECK_FILE
+	sort -k 1 -u $DEDUP_CUR_FILE -o $DEDUP_CUR_FILE
+	sort -k 2 $DEDUP_CUR_FILE -o $CHECK_FILE
 fi
 
 cd $CURR_PWD
