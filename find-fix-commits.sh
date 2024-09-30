@@ -50,7 +50,7 @@ check_kernel_tag() {
 }
 
 dedup_stable_commits() {
-	STABLE_VERSION=$1
+	STABLE_VERSION=v$1
 	DEDUP_IN_FILE=$2
 	DEDUP_OUT_FILE=$3
 	FINAL=$4 # true if it is the last dedup then record both hash and subject
@@ -58,21 +58,25 @@ dedup_stable_commits() {
 
 	# NOTE the branch need to be existed by run the cmd like this
 	# 'git checkout -b linux-6.8.y origin/linux-6.8.y'
-	git checkout linux-${STABLE_VERSION}.y
+	git checkout linux-${1}.y
 	git pull
 	# dedup commits which had been merged by previous stable kernel
 	cat $DEDUP_IN_FILE | while read commit1
 	do
-		echo $commit1 $STABLE_VERSION IN=$DEDUP_IN_FILE OUT=$DEDUP_OUT_FILE
+		#echo $commit1 $STABLE_VERSION IN=$DEDUP_IN_FILE OUT=$DEDUP_OUT_FILE
 		# TODO better matching
-		git log v${STABLE_VERSION}.. | grep "$commit1" | grep commit |grep pstream
-		if [ $? -eq 1 ]; then
+		NOT_DUP=$(git log ${STABLE_VERSION}..HEAD | grep "$commit1" | grep commit |grep pstream)
+		#echo $NOT_DUP
+		if [ ! -n "$NOT_DUP" ]; then
+			cd $LINUX_TREE # commit might not in stable tree if it is pretty new
 			if [ "$FINAL" = "false" ]; then
 				echo ${commit1} >> $DEDUP_OUT_FILE
 			else
-				commit_summary=$(git show --pretty=format:"%h %s" --no-patch $commit1)
+				commit_summary=$(git show -s --format="%ci %h %s" $commit1)
+				#commit_summary=$(git show --pretty=format:"%h %s" --no-patch $commit1)
 				echo ${commit_summary} >> $DEDUP_OUT_FILE
 			fi
+			cd $LINUX_STABLE_TREE
 		fi
 	done
 }
@@ -127,6 +131,7 @@ else
 fi
 
 rm -rf $COMMIT1_FILE $COMMIT2_FILE $DEDUP_CUR_FILE $DEDUP_PRE_FILE $DEDUP_AFTER_FILE $CHECK_FILE
+#rm -rf $DEDUP_CUR_FILE $DEDUP_PRE_FILE $DEDUP_AFTER_FILE $CHECK_FILE
 
 # PART I - get all fix commits from BASE_VERSION
 cd $LINUX_TREE
@@ -136,7 +141,13 @@ cat $COMMIT1_FILE | while read commit1
 do
 	IS_FIX=$(git show ${commit1} | grep "Fixes: ")
 	if [ ! -n "$IS_FIX" ]; then
-		continue
+		IS_CC_STABLE=$(git show ${commit1} | grep "Cc: stable@vger.kernel.org")
+		if [ ! -n "$IS_CC_STABLE" ]; then
+			continue
+		else
+			#echo COMMIT $commit1 was cced to stable
+			echo ${commit1} >> $COMMIT2_FILE
+		fi
 	else
 		echo ${commit1} >> $COMMIT2_FILE
 	fi
@@ -185,14 +196,15 @@ echo "PART II.3 is done !"
 
 # sort the final file per subsystem
 if [ $a_result -eq 1 ]; then
+	# "-u (--unique)" - output only the first of an equal run in case there is redundent?
 	sort -k 1 -u $DEDUP_AFTER_FILE -o $DEDUP_AFTER_FILE
-	sort -k 2 $DEDUP_AFTER_FILE -o $CHECK_FILE
+	sort -k 5 $DEDUP_AFTER_FILE -o $CHECK_FILE
 elif [ $p_result -eq 1 ]; then
 	sort -k 1 -u $DEDUP_PRE_FILE -o $DEDUP_PRE_FILE
-	sort -k 2 $DEDUP_PRE_FILE -o $CHECK_FILE
+	sort -k 5 $DEDUP_PRE_FILE -o $CHECK_FILE
 else
 	sort -k 1 -u $DEDUP_CUR_FILE -o $DEDUP_CUR_FILE
-	sort -k 2 $DEDUP_CUR_FILE -o $CHECK_FILE
+	sort -k 5 $DEDUP_CUR_FILE -o $CHECK_FILE
 fi
 
 cd $CURR_PWD
