@@ -1,0 +1,18 @@
+USAGE for noble (6.8 based) which need to dedup from stable kernels
+(6.6, 6.8, 6.9 and 6.10):
+    
+1. ./find-candidate-commits.sh
+   ./find-candidate-commits.sh  -b 6.8 -o  /tmp/candidate-commits
+    
+2. ./dedup-candidates-per-stable.sh
+   ./dedup-candidates-per-stable.sh -d 6.8 -i /tmp/candidate-commits -o /tmp/candidates-deduped-6.8
+   ./dedup-candidates-per-stable.sh -d 6.6 -i /tmp/candidates-deduped-6.8 -o /tmp/candidates-deduped-6.6
+   ./dedup-candidates-per-stable.sh -d 6.9 -i /tmp/candidates-deduped-6.6 -o /tmp/candidates-deduped-6.9
+   ./dedup-candidates-per-stable.sh -d 6.10 -i /tmp/candidates-deduped-6.9 -o /tmp/candidates-deduped-6.10
+    
+3. ./dedup-candidates-per-sru.sh
+   ./dedup-candidates-per-sru.sh -c noble -i /tmp/candidates-deduped-6.10 -o /tmp/candidates-check -l true
+    
+4. ./sort-candidates-check.sh /tmp/candidates-check
+    
+The final results is recorded in /tmp/sorted-candidates-check by default.
